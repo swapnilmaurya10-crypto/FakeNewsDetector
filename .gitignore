@@ -1,0 +1,6 @@
+accuracy.pkl
+cm.pkl
+model.pkl
+vectorizer.pkl
+news.csv
+__pycache__/
