@@ -1,9 +1,11 @@
 import streamlit as st
-import joblib
 import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 import wikipedia
+
+# 🔥 IMPORT MODEL TRAINING
+from model import train_model
 
 # ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
@@ -71,11 +73,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- LOAD MODEL ----------------
-model = joblib.load("model.pkl")
-vectorizer = joblib.load("vectorizer.pkl")
-accuracy = joblib.load("accuracy.pkl")
-cm = joblib.load("cm.pkl")
+# ---------------- TRAIN MODEL (NEW 🔥) ----------------
+@st.cache_resource
+def load_model():
+    return train_model()
+
+with st.spinner("Training model..."):
+    model, vectorizer, accuracy, cm = load_model()
 
 # ---------------- FUNCTIONS ----------------
 def clean_text(text):
@@ -131,7 +135,6 @@ def login_page():
 # ---------------- MAIN APP ----------------
 def main_app():
 
-    # Logout
     if st.button("🚪 Logout"):
         st.session_state.logged_in = False
         st.rerun()
@@ -139,10 +142,8 @@ def main_app():
     st.markdown("<h1>🧠 AI Fake News Detector</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;'>Hybrid ML + Fact Checking System</p>", unsafe_allow_html=True)
 
-    # INPUT
     user_input = st.text_area("📰 Enter News", placeholder="Paste news here...")
 
-    # ANALYZE
     if st.button("🚀 Analyze News"):
 
         if user_input.strip() == "":
@@ -175,26 +176,19 @@ def main_app():
             st.progress(confidence / 100)
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # INSTRUCTIONS (FIXED POSITION)
     st.markdown("### 📘 Instructions & Interpretation Guide")
 
     with st.expander("ℹ️ Click to view instructions"):
         st.markdown("""
 ### 🧠 How to Use
-- Paste any news headline or article  
-- Click **Analyze News**
+- Paste news and click analyze
 
 ### 📊 Interpretation
-- 🟢 REAL → Confidence ≥ 75%  
-- 🔴 FAKE → Logical mismatch / fact mismatch  
-- 🟡 UNCERTAIN → Confidence < 75%
-
-### ⚠️ Note
-- Uses ML + Rule-based + Wikipedia  
-- Detects patterns, not absolute truth  
+- REAL ≥ 75%
+- FAKE → mismatch
+- UNCERTAIN < 75%
 """)
 
-    # PERFORMANCE
     st.markdown("### 📊 Model Performance")
     st.metric("Accuracy", f"{round(accuracy*100,2)}%")
 
