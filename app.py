@@ -3,8 +3,13 @@ import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 import wikipedia
+import requests
+from bs4 import BeautifulSoup
+from googlesearch import search
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# 🔥 IMPORT MODEL TRAINING
+# 🔥 IMPORT MODEL
 from model import train_model
 
 # ---------------- SESSION ----------------
@@ -14,71 +19,12 @@ if "logged_in" not in st.session_state:
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="AI Fake News Detector", layout="centered")
 
-# ---------------- CUSTOM CSS ----------------
-st.markdown("""
-<style>
-.stApp {
-    background: linear-gradient(-45deg, #0f172a, #1e293b, #312e81, #0f172a);
-    background-size: 400% 400%;
-    animation: gradientMove 12s ease infinite;
-    color: white;
-}
-@keyframes gradientMove {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-.stApp::before, .stApp::after {
-    content: "";
-    position: fixed;
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    filter: blur(120px);
-    z-index: -1;
-    animation: float 10s ease-in-out infinite;
-}
-.stApp::before {
-    background: #6366f1;
-    top: 10%;
-    left: 10%;
-}
-.stApp::after {
-    background: #8b5cf6;
-    bottom: 10%;
-    right: 10%;
-}
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-30px); }
-}
-.stButton>button {
-    width: 100%;
-    border-radius: 12px;
-    height: 3em;
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
-    color: white;
-    font-weight: bold;
-}
-.result-box {
-    padding: 15px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(10px);
-}
-.stExpander {
-    background: rgba(255,255,255,0.05);
-    border-radius: 10px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- TRAIN MODEL (NEW 🔥) ----------------
+# ---------------- TRAIN MODEL ----------------
 @st.cache_resource
 def load_model():
     return train_model()
 
-with st.spinner("Training model..."):
+with st.spinner("Initializing model…"):
     model, vectorizer, accuracy, cm = load_model()
 
 # ---------------- FUNCTIONS ----------------
@@ -104,93 +50,131 @@ def rule_based_fact_check(text):
             return "MATCH" if country in text else "MISMATCH"
     return "UNKNOWN"
 
-def fact_check_wikipedia(text):
+# 🔥 IMPROVED FACT CHECK (REAL FIX)
+def fact_check_news_sources(text):
     try:
-        results = wikipedia.search(text)
-        if not results:
+        query = text[:80]
+        results = list(search(query, num_results=5))
+
+        similarities = []
+
+        for url in results:
+            try:
+                response = requests.get(url, timeout=3)
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                title = soup.title.string if soup.title else ""
+                if not title:
+                    continue
+
+                vect = TfidfVectorizer().fit_transform([text, title])
+                sim = cosine_similarity(vect[0:1], vect[1:2])[0][0]
+
+                similarities.append(sim)
+
+            except:
+                continue
+
+        if len(similarities) == 0:
             return "UNKNOWN"
-        summary = wikipedia.summary(results[0], sentences=2)
-        text_words = set(text.lower().split())
-        summary_words = set(summary.lower().split())
-        return "MATCH" if len(text_words & summary_words)/len(text_words) > 0.4 else "MISMATCH"
+
+        max_sim = max(similarities)
+
+        if max_sim > 0.4:
+            return "MATCH"
+        else:
+            return "MISMATCH"
+
     except:
         return "UNKNOWN"
 
 # ---------------- LOGIN PAGE ----------------
 def login_page():
-    st.markdown("<h1>🔐 Login</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Access AI Fake News Detector</p>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="login-card">
+        <div class="eyebrow">Restricted Access</div>
+        <h1 class="pg-title">Verify<br><em>Your Identity</em></h1>
+        <p class="pg-sub">AI-powered misinformation analysis system</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("Username", placeholder="Enter username")
+    password = st.text_input("Password", type="password", placeholder="Enter password")
 
-    if st.button("Login"):
+    if st.button("Authenticate & Enter"):
         if username == "admin" and password == "1234":
             st.session_state.logged_in = True
-            st.success("✅ Login Successful")
+            st.success("✅ Login successful")
             st.rerun()
         else:
-            st.error("❌ Invalid Credentials")
+            st.error("❌ Invalid credentials")
 
 # ---------------- MAIN APP ----------------
 def main_app():
+    _, col_btn = st.columns([6, 1])
+    with col_btn:
+        if st.button("Sign Out"):
+            st.session_state.logged_in = False
+            st.rerun()
 
-    if st.button("🚪 Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
+    st.markdown("""
+    <div class="eyebrow">AI-Powered Detection</div>
+    <h1 class="pg-title">Is this news<br><em>real or fabricated?</em></h1>
+    <p class="pg-sub">Hybrid ML + Smart Web Verification</p>
+    """, unsafe_allow_html=True)
 
-    st.markdown("<h1>🧠 AI Fake News Detector</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Hybrid ML + Fact Checking System</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
-    user_input = st.text_area("📰 Enter News", placeholder="Paste news here...")
+    st.markdown('<div class="sec-label">News Input</div>', unsafe_allow_html=True)
+    user_input = st.text_area("", placeholder="Paste a news article or headline here…", height=160)
 
-    if st.button("🚀 Analyze News"):
-
+    if st.button("🔎  Analyze News"):
         if user_input.strip() == "":
             st.warning("⚠️ Please enter news text.")
         else:
             result, confidence = predict_news(user_input)
             rule_result = rule_based_fact_check(user_input)
+            fact_result = fact_check_news_sources(user_input)
 
-            st.markdown("<div class='result-box'>", unsafe_allow_html=True)
+            st.markdown('<div class="result-box">', unsafe_allow_html=True)
 
+            # 🔥 FINAL DECISION LOGIC
             if rule_result == "MISMATCH":
-                st.error("🔴 FAKE (Logical mismatch detected)")
-            else:
-                fact_result = fact_check_wikipedia(user_input)
+                st.error("🔴 FAKE — Logical mismatch detected")
 
-                if fact_result == "MISMATCH":
-                    st.error("🔴 FAKE (Fact-check mismatch detected)")
-                elif fact_result == "UNKNOWN":
-                    if confidence < 75:
-                        st.warning(f"🟡 UNCERTAIN ({confidence}%)")
-                    else:
-                        st.info("🟡 Could not verify")
+            elif fact_result == "MATCH":
+                if confidence >= 60:
+                    st.success(f"🟢 REAL — Verified from news sources ({confidence}%)")
                 else:
-                    if result == "REAL":
-                        st.success(f"🟢 REAL ({confidence}%)")
-                    else:
-                        st.error(f"🔴 FAKE ({confidence}%)")
+                    st.warning("🟡 Verified but low confidence")
 
-            st.write(f"Prediction: {result} | Confidence: {confidence}%")
+            elif fact_result == "MISMATCH":
+                st.error("🔴 FAKE — Not matching real news articles")
+
+            else:
+                st.warning("🟡 UNCERTAIN — Could not verify")
+
+            st.markdown(
+                f'<div class="pred-row">Prediction: <span>{result}</span>'
+                f'&nbsp;&nbsp;|&nbsp;&nbsp;Confidence: <span>{confidence}%</span></div>',
+                unsafe_allow_html=True,
+            )
+
             st.progress(confidence / 100)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("### 📘 Instructions & Interpretation Guide")
+    st.markdown("---")
 
-    with st.expander("ℹ️ Click to view instructions"):
+    st.markdown('<div class="sec-label">Instructions & Guide</div>', unsafe_allow_html=True)
+    with st.expander("ℹ️  How to interpret results"):
         st.markdown("""
-### 🧠 How to Use
-- Paste news and click analyze
-
-### 📊 Interpretation
-- REAL ≥ 75%
-- FAKE → mismatch
-- UNCERTAIN < 75%
+- REAL → Verified from real news + ML confidence  
+- FAKE → Logical mismatch or no matching article  
+- UNCERTAIN → Could not verify  
 """)
 
-    st.markdown("### 📊 Model Performance")
-    st.metric("Accuracy", f"{round(accuracy*100,2)}%")
+    st.markdown('<div class="sec-label" style="margin-top:1.5rem">Model Performance</div>', unsafe_allow_html=True)
+    st.metric("Accuracy", f"{round(accuracy * 100, 2)}%")
 
 # ---------------- ROUTING ----------------
 if st.session_state.logged_in:
