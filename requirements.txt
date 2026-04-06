@@ -6,3 +6,5 @@ seaborn
 wikipedia
 joblib
 numpy
+googlesearch-python
+requests
